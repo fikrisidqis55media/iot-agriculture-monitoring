@@ -4,17 +4,30 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 export async function POST(req: NextRequest) {
   const body = await req.json()
 
-  const { deviceId, timestamp, temperature, humidity, gasLevel, soilMoistureRaw, soilMoisturePercent } = body
-
-  const { error } = await supabaseAdmin.from('sensor_logs').insert([{
-    device_id: deviceId,
-    timestamp,
+  const {
+    deviceId,
     temperature,
     humidity,
-    gas_level: gasLevel,
-    soil_moisture_raw: soilMoistureRaw,
-    soil_moisture_percent: soilMoisturePercent
-  }])
+    gasLevel,
+    soilMoistureRaw,
+    soilMoisturePercent
+  } = body
+
+  if (!deviceId) {
+    return NextResponse.json({ success: false, message: 'Missing deviceId' }, { status: 400 })
+  }
+
+  const { error } = await supabaseAdmin
+    .from('sensor_logs')
+    .insert([{
+      device_id: deviceId,
+      temperature,
+      humidity,
+      gas_level: gasLevel,
+      soil_moisture_raw: soilMoistureRaw,
+      soil_moisture_percent: soilMoisturePercent,
+      timestamp: new Date().toISOString()
+    }])
 
   if (error) {
     console.error('Insert error:', error)
@@ -26,16 +39,22 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const type = searchParams.get('type') // 'latest' or 'all'
+  const type = searchParams.get('type')
+  const deviceId = searchParams.get('device_id')
+  // const limit = parseInt(searchParams.get('limit') || '100')
 
   if (type === 'latest') {
+    if (!deviceId) {
+      return NextResponse.json({ success: false, message: 'Missing device_id' }, { status: 400 })
+    }
+
     const { data, error } = await supabaseAdmin
       .from('sensor_logs')
       .select('*')
+      .eq('device_id', deviceId)
       .order('timestamp', { ascending: false })
       .limit(1)
       .single()
-
 
     if (error) {
       console.error('Fetch latest error:', error)
@@ -46,10 +65,15 @@ export async function GET(req: NextRequest) {
   }
 
   if (type === 'all') {
-    const { data, error } = await supabaseAdmin
+    const query = supabaseAdmin
       .from('sensor_logs')
       .select('*')
       .order('timestamp', { ascending: true })
+
+    if (deviceId) query.eq('device_id', deviceId)
+    // if (limit) query.limit(limit)
+
+    const { data, error } = await query
 
     if (error) {
       console.error('Fetch all error:', error)
