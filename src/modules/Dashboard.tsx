@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useAllSensor, useLatestSensor } from "@/app/hooks/useSensor";
+import {
+  useAllSensor,
+  useLatestSensor,
+  useDownloadSensorReport,
+} from "@/app/hooks/useSensor";
 import {
   ResponsiveContainer,
   LineChart,
@@ -86,7 +90,6 @@ export default function Dashboard() {
   const { data: latest, isLoading: loadingLatest } = useLatestSensor();
   const { data: allData, isLoading: loadingAll } = useAllSensor();
   const [activeSensors, setActiveSensors] = useState<string[]>([]);
-
   const [range, setRange] = useState<"today" | "7days" | "30days">("today");
 
   // Device config (auto mode) via react-query
@@ -132,6 +135,8 @@ export default function Dashboard() {
   const [relayLoading, setRelayLoading] = useState(false);
   const [relayStatus, setRelayStatus] = useState<string | null>(null);
 
+  const downloadReportMutation = useDownloadSensorReport();
+
   async function handleRelay(command: "ON" | "OFF") {
     setRelayLoading(true);
     setRelayStatus(null);
@@ -166,8 +171,49 @@ export default function Dashboard() {
     { key: "temperature", color: "#8884d8", name: "Temperature (°C)" },
     { key: "humidity", color: "#82ca9d", name: "Humidity (%)" },
     { key: "gas_level", color: "#ff7300", name: "Gas Level" },
-    { key: "soil_moisture", color: "#00c4ff", name: "Soil Moisture (%)" },
+    {
+      key: "soil_moisture_percent",
+      color: "#00c4ff",
+      name: "Soil Moisture (%)",
+    },
   ];
+
+  // Function to handle download
+  const handleDownloadReport = () => {
+    const deviceId = "esp32-001";
+    let start: string | undefined = undefined;
+    let end: string | undefined = undefined;
+    if (range === "today") {
+      start = dayjs().startOf("day").toISOString();
+      end = dayjs().endOf("day").toISOString();
+    } else if (range === "7days") {
+      start = dayjs().subtract(7, "day").startOf("day").toISOString();
+      end = dayjs().endOf("day").toISOString();
+    } else if (range === "30days") {
+      start = dayjs().subtract(30, "day").startOf("day").toISOString();
+      end = dayjs().endOf("day").toISOString();
+    }
+    downloadReportMutation.mutate(
+      { deviceId, start, end },
+      {
+        onSuccess: (blob) => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `sensor_logs_${
+            new Date().toISOString().split("T")[0]
+          }.csv`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+        },
+        onError: () => {
+          alert("Gagal download report");
+        },
+      }
+    );
+  };
 
   if (loadingLatest || loadingAll)
     return <div className="p-10 text-center">Loading...</div>;
@@ -216,6 +262,55 @@ export default function Dashboard() {
               onClick={() => setRange("30days")}
             />
           </div>
+          <button
+            onClick={handleDownloadReport}
+            disabled={downloadReportMutation.isPending}
+            className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors flex items-center gap-1 disabled:opacity-70"
+          >
+            {downloadReportMutation.isPending ? (
+              <>
+                <svg
+                  className="animate-spin h-4 w-4 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                <span>Downloading...</span>
+              </>
+            ) : (
+              <>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+                <span>Download Report</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -249,8 +344,8 @@ export default function Dashboard() {
             title="Soil Moisture"
             value={latest.soil_moisture}
             unit="%"
-            onClick={() => toggleSensor("soil_moisture")}
-            active={activeSensors.includes("soil_moisture")}
+            onClick={() => toggleSensor("soil_moisture_percent")}
+            active={activeSensors.includes("soil_moisture_percent")}
           />
         </div>
       </div>

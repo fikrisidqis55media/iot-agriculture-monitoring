@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 
 export const useLatestSensor = () => {
   return useQuery({
@@ -25,5 +25,33 @@ export const useAllSensor = () => {
       return json.data;
     },
     refetchInterval: 5000, // auto refresh tiap 5 detik (opsional)
+  });
+};
+
+export const useDownloadSensorReport = () => {
+  return useMutation({
+    mutationFn: async ({
+      deviceId,
+      start,
+      end,
+      limit,
+      downsample,
+    }: {
+      deviceId: string;
+      start?: string;
+      end?: string;
+      limit?: number;
+      downsample?: number;
+    }) => {
+      let url = `/api/sensor-logs?type=download&device_id=${deviceId}&format=csv`;
+      if (start) url += `&start=${start}`;
+      if (end) url += `&end=${end}`;
+      if (limit) url += `&limit=${limit}`;
+      if (downsample) url += `&downsample=${downsample}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Gagal download report");
+      const blob = await res.blob();
+      return blob;
+    },
   });
 };
